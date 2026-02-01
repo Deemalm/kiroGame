@@ -69,19 +69,9 @@ class FlappyKiro {
         this.ghost.image = new Image();
         this.ghost.image.src = 'assets/ghosty.png';
         
-        // Load game over audio with better error handling
-        this.gameOverSound = new Audio('assets/game_over.wav');
-        this.gameOverSound.volume = 0.5;
-        this.gameOverSound.preload = 'auto';
-        
-        // Add event listeners to ensure audio is loaded
-        this.gameOverSound.addEventListener('canplaythrough', () => {
-            console.log('Game over sound loaded successfully');
-        });
-        
-        this.gameOverSound.addEventListener('error', (e) => {
-            console.log('Game over sound failed to load:', e);
-        });
+        // Load game over audio with GitHub Pages compatibility
+        this.gameOverSound = null;
+        this.loadGameOverSound();
         
         // Create Web Audio context for sand sound
         this.audioContext = null;
@@ -89,6 +79,51 @@ class FlappyKiro {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         } catch (e) {
             console.log('Web Audio API not supported');
+        }
+    }
+    
+    loadGameOverSound() {
+        try {
+            this.gameOverSound = new Audio();
+            this.gameOverSound.volume = 0.5;
+            this.gameOverSound.preload = 'auto';
+            
+            // Try multiple paths for GitHub Pages compatibility
+            const audioPaths = [
+                './assets/game_over.wav',
+                'assets/game_over.wav',
+                '/assets/game_over.wav'
+            ];
+            
+            let pathIndex = 0;
+            
+            const tryNextPath = () => {
+                if (pathIndex < audioPaths.length) {
+                    console.log('Trying audio path:', audioPaths[pathIndex]);
+                    this.gameOverSound.src = audioPaths[pathIndex];
+                    this.gameOverSound.load();
+                    pathIndex++;
+                } else {
+                    console.log('All audio paths failed, using synthetic sound');
+                    this.gameOverSound = null;
+                }
+            };
+            
+            this.gameOverSound.addEventListener('canplaythrough', () => {
+                console.log('Game over sound loaded successfully from:', this.gameOverSound.src);
+            });
+            
+            this.gameOverSound.addEventListener('error', (e) => {
+                console.log('Audio path failed:', this.gameOverSound.src);
+                tryNextPath();
+            });
+            
+            // Start with first path
+            tryNextPath();
+            
+        } catch (e) {
+            console.log('Failed to create Audio object:', e);
+            this.gameOverSound = null;
         }
     }
     
@@ -123,9 +158,6 @@ class FlappyKiro {
     }
     
     handleInput() {
-        // Enable audio context on first user interaction
-        this.enableAudio();
-        
         if (this.gameState === 'levelSelect') {
             // Do nothing, level selection handled by keyboard/mouse events
             return;
@@ -135,18 +167,6 @@ class FlappyKiro {
             this.flap();
         } else if (this.gameState === 'gameOver') {
             this.resetGame();
-        }
-    }
-    
-    enableAudio() {
-        // Resume audio context if suspended (required by browsers)
-        if (this.audioContext && this.audioContext.state === 'suspended') {
-            this.audioContext.resume();
-        }
-        
-        // Preload game over sound on first interaction
-        if (this.gameOverSound && this.gameOverSound.readyState < 2) {
-            this.gameOverSound.load();
         }
     }
     
@@ -253,16 +273,8 @@ class FlappyKiro {
     playSound(audio) {
         try {
             audio.currentTime = 0;
-            audio.play().catch(e => {
-                console.log('Audio play failed:', e);
-                // Try to play again after a short delay
-                setTimeout(() => {
-                    audio.play().catch(() => {});
-                }, 100);
-            });
-        } catch (e) {
-            console.log('Audio error:', e);
-        }
+            audio.play();
+        } catch (e) {}
     }
     
     generateInitialPipes() {
@@ -365,10 +377,8 @@ class FlappyKiro {
     gameOver() {
         this.gameState = 'gameOver';
         
-        // Play game over sound with better handling
-        if (this.gameOverSound) {
-            this.playGameOverSound();
-        }
+        // Play game over sound with fallback
+        this.playGameOverSound();
         
         // Save high score
         const currentHighScore = localStorage.getItem('flappyKiroHighScore') || 0;
@@ -381,29 +391,78 @@ class FlappyKiro {
     }
     
     playGameOverSound() {
-        try {
-            // Reset and play the game over sound
-            this.gameOverSound.currentTime = 0;
-            
-            const playPromise = this.gameOverSound.play();
-            
-            if (playPromise !== undefined) {
-                playPromise
-                    .then(() => {
-                        console.log('Game over sound played successfully');
-                    })
-                    .catch(error => {
-                        console.log('Game over sound play failed:', error);
-                        // Try alternative approach
-                        setTimeout(() => {
-                            this.gameOverSound.play().catch(() => {
-                                console.log('Game over sound retry failed');
-                            });
-                        }, 100);
-                    });
+        // If we have a loaded audio file, try to play it
+        if (this.gameOverSound && this.gameOverSound.readyState >= 2) {
+            try {
+                this.gameOverSound.currentTime = 0;
+                const playPromise = this.gameOverSound.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            console.log('Game over sound played successfully');
+                        })
+                        .catch(error => {
+                            console.log('Game over sound play failed, using synthetic:', error);
+                            this.playSyntheticGameOverSound();
+                        });
+                } else {
+                    console.log('Game over sound played (legacy)');
+                }
+                return;
+            } catch (error) {
+                console.log('Game over sound error, using synthetic:', error);
             }
-        } catch (error) {
-            console.log('Game over sound error:', error);
+        }
+        
+        // Fallback to synthetic sound
+        console.log('Using synthetic game over sound');
+        this.playSyntheticGameOverSound();
+    }
+    
+    playSyntheticGameOverSound() {
+        if (!this.audioContext) return;
+        
+        try {
+            // Resume audio context if suspended
+            if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume();
+            }
+            
+            // Create a dramatic game over sound effect
+            const oscillator1 = this.audioContext.createOscillator();
+            const oscillator2 = this.audioContext.createOscillator();
+            const gainNode = this.audioContext.createGain();
+            
+            // Connect nodes
+            oscillator1.connect(gainNode);
+            oscillator2.connect(gainNode);
+            gainNode.connect(this.audioContext.destination);
+            
+            // Configure dramatic descending tones
+            oscillator1.type = 'sawtooth';
+            oscillator1.frequency.setValueAtTime(220, this.audioContext.currentTime);
+            oscillator1.frequency.exponentialRampToValueAtTime(110, this.audioContext.currentTime + 0.8);
+            
+            oscillator2.type = 'triangle';
+            oscillator2.frequency.setValueAtTime(165, this.audioContext.currentTime);
+            oscillator2.frequency.exponentialRampToValueAtTime(82.5, this.audioContext.currentTime + 0.8);
+            
+            // Volume envelope (dramatic fade)
+            gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.15, this.audioContext.currentTime + 0.05);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.8);
+            
+            // Play the sound
+            oscillator1.start(this.audioContext.currentTime);
+            oscillator1.stop(this.audioContext.currentTime + 0.8);
+            oscillator2.start(this.audioContext.currentTime);
+            oscillator2.stop(this.audioContext.currentTime + 0.8);
+            
+            console.log('Synthetic game over sound played');
+            
+        } catch (e) {
+            console.log('Synthetic game over sound failed:', e);
         }
     }
     
