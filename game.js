@@ -69,9 +69,19 @@ class FlappyKiro {
         this.ghost.image = new Image();
         this.ghost.image.src = 'assets/ghosty.png';
         
-        // Load game over audio
+        // Load game over audio with better error handling
         this.gameOverSound = new Audio('assets/game_over.wav');
         this.gameOverSound.volume = 0.5;
+        this.gameOverSound.preload = 'auto';
+        
+        // Add event listeners to ensure audio is loaded
+        this.gameOverSound.addEventListener('canplaythrough', () => {
+            console.log('Game over sound loaded successfully');
+        });
+        
+        this.gameOverSound.addEventListener('error', (e) => {
+            console.log('Game over sound failed to load:', e);
+        });
         
         // Create Web Audio context for sand sound
         this.audioContext = null;
@@ -113,6 +123,9 @@ class FlappyKiro {
     }
     
     handleInput() {
+        // Enable audio context on first user interaction
+        this.enableAudio();
+        
         if (this.gameState === 'levelSelect') {
             // Do nothing, level selection handled by keyboard/mouse events
             return;
@@ -122,6 +135,18 @@ class FlappyKiro {
             this.flap();
         } else if (this.gameState === 'gameOver') {
             this.resetGame();
+        }
+    }
+    
+    enableAudio() {
+        // Resume audio context if suspended (required by browsers)
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume();
+        }
+        
+        // Preload game over sound on first interaction
+        if (this.gameOverSound && this.gameOverSound.readyState < 2) {
+            this.gameOverSound.load();
         }
     }
     
@@ -228,8 +253,16 @@ class FlappyKiro {
     playSound(audio) {
         try {
             audio.currentTime = 0;
-            audio.play();
-        } catch (e) {}
+            audio.play().catch(e => {
+                console.log('Audio play failed:', e);
+                // Try to play again after a short delay
+                setTimeout(() => {
+                    audio.play().catch(() => {});
+                }, 100);
+            });
+        } catch (e) {
+            console.log('Audio error:', e);
+        }
     }
     
     generateInitialPipes() {
@@ -331,7 +364,11 @@ class FlappyKiro {
     
     gameOver() {
         this.gameState = 'gameOver';
-        this.playSound(this.gameOverSound);
+        
+        // Play game over sound with better handling
+        if (this.gameOverSound) {
+            this.playGameOverSound();
+        }
         
         // Save high score
         const currentHighScore = localStorage.getItem('flappyKiroHighScore') || 0;
@@ -341,6 +378,33 @@ class FlappyKiro {
         
         this.instructionsElement.innerHTML =
             '<span class="game-over">GAME OVER</span><br>Press SPACE or click to restart';
+    }
+    
+    playGameOverSound() {
+        try {
+            // Reset and play the game over sound
+            this.gameOverSound.currentTime = 0;
+            
+            const playPromise = this.gameOverSound.play();
+            
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        console.log('Game over sound played successfully');
+                    })
+                    .catch(error => {
+                        console.log('Game over sound play failed:', error);
+                        // Try alternative approach
+                        setTimeout(() => {
+                            this.gameOverSound.play().catch(() => {
+                                console.log('Game over sound retry failed');
+                            });
+                        }, 100);
+                    });
+            }
+        } catch (error) {
+            console.log('Game over sound error:', error);
+        }
     }
     
     resetGame() {
