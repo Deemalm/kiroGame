@@ -5,6 +5,9 @@ class FlappyKiro {
         this.scoreElement = document.getElementById('score');
         this.instructionsElement = document.getElementById('instructions');
         
+        // Initialize responsive canvas
+        this.initializeCanvas();
+        
         // Game state
         this.gameState = 'levelSelect'; // levelSelect, waiting, playing, gameOver
         this.score = 0;
@@ -62,7 +65,72 @@ class FlappyKiro {
         
         this.loadAssets();
         this.setupEventListeners();
+        this.setupResizeHandler();
         this.gameLoop();
+    }
+    
+    initializeCanvas() {
+        this.resizeCanvas();
+    }
+    
+    resizeCanvas() {
+        // Calculate optimal canvas size based on screen
+        const maxWidth = Math.min(window.innerWidth * 0.9, 1000);
+        const maxHeight = Math.min(window.innerHeight * 0.8, 700);
+        
+        // Maintain aspect ratio (4:3)
+        const aspectRatio = 4 / 3;
+        let canvasWidth, canvasHeight;
+        
+        if (maxWidth / maxHeight > aspectRatio) {
+            canvasHeight = maxHeight;
+            canvasWidth = canvasHeight * aspectRatio;
+        } else {
+            canvasWidth = maxWidth;
+            canvasHeight = canvasWidth / aspectRatio;
+        }
+        
+        // Set canvas size
+        this.canvas.width = canvasWidth;
+        this.canvas.height = canvasHeight;
+        
+        // Update game proportions based on new size
+        this.updateGameProportions();
+    }
+    
+    updateGameProportions() {
+        // Scale game elements based on canvas size
+        const baseWidth = 800; // Original design width
+        const baseHeight = 600; // Original design height
+        
+        this.scaleX = this.canvas.width / baseWidth;
+        this.scaleY = this.canvas.height / baseHeight;
+        
+        // Update ghost size and position
+        if (this.ghost) {
+            this.ghost.width = 60 * Math.min(this.scaleX, this.scaleY);
+            this.ghost.height = 60 * Math.min(this.scaleX, this.scaleY);
+            this.ghost.x = 150 * this.scaleX;
+            if (this.ghost.y === 300) { // Only reset if at default position
+                this.ghost.y = 300 * this.scaleY;
+            }
+        }
+        
+        // Update pipe dimensions
+        this.pipeWidth = 80 * this.scaleX;
+        
+        // Apply level settings to get correct gaps and spacing
+        if (this.selectedLevel && this.levelConfig) {
+            const config = this.levelConfig[this.selectedLevel];
+            this.pipeGap = config.pipeGap * this.scaleY;
+            this.pipeSpacing = config.pipeSpacing * this.scaleX;
+        }
+    }
+    
+    setupResizeHandler() {
+        window.addEventListener('resize', () => {
+            this.resizeCanvas();
+        });
     }
     
     loadAssets() {
@@ -137,18 +205,22 @@ class FlappyKiro {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
-        // Updated button areas for vertical layout
-        const buttonWidth = 200;
-        const buttonHeight = 60;
+        // Scale click coordinates to canvas coordinates
+        const canvasX = (x / rect.width) * this.canvas.width;
+        const canvasY = (y / rect.height) * this.canvas.height;
+        
+        // Updated button areas for responsive vertical layout
+        const buttonWidth = 200 * this.scaleX;
+        const buttonHeight = 60 * this.scaleY;
         const buttonX = (this.canvas.width - buttonWidth) / 2;
-        const startY = 150;
-        const spacing = 80;
+        const startY = 150 * this.scaleY;
+        const spacing = 80 * this.scaleY;
         
         // Check if click is within button area horizontally
-        if (x >= buttonX && x <= buttonX + buttonWidth) {
+        if (canvasX >= buttonX && canvasX <= buttonX + buttonWidth) {
             for (let i = 0; i < 3; i++) {
                 const buttonY = startY + i * spacing;
-                if (y >= buttonY && y <= buttonY + buttonHeight) {
+                if (canvasY >= buttonY && canvasY <= buttonY + buttonHeight) {
                     const levels = ['beginner', 'intermediate', 'expert'];
                     this.selectLevel(levels[i]);
                     break;
@@ -164,10 +236,10 @@ class FlappyKiro {
         this.ghost.gravity = config.gravity;
         this.ghost.jumpPower = config.jumpPower;
         
-        // Update game settings
-        this.gameSpeed = config.gameSpeed;
-        this.pipeGap = config.pipeGap;
-        this.pipeSpacing = config.pipeSpacing;
+        // Update game settings with scaling
+        this.gameSpeed = config.gameSpeed * this.scaleX;
+        this.pipeGap = config.pipeGap * this.scaleY;
+        this.pipeSpacing = config.pipeSpacing * this.scaleX;
     }
     
     startGame() {
@@ -721,27 +793,32 @@ class FlappyKiro {
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
+        // Responsive font sizes
+        const titleSize = Math.min(36 * Math.min(this.scaleX, this.scaleY), 48);
+        const subtitleSize = Math.min(18 * Math.min(this.scaleX, this.scaleY), 24);
+        const buttonTextSize = Math.min(20 * Math.min(this.scaleX, this.scaleY), 24);
+        const detailSize = Math.min(12 * Math.min(this.scaleX, this.scaleY), 14);
+        
         // Title
         this.ctx.fillStyle = 'white';
-        this.ctx.font = 'bold 36px Courier New';
+        this.ctx.font = `bold ${titleSize}px Courier New`;
         this.ctx.textAlign = 'center';
-        this.ctx.fillText('FLAPPY KIRO', this.canvas.width / 2, 80);
+        this.ctx.fillText('FLAPPY KIRO', this.canvas.width / 2, 80 * this.scaleY);
         
         // Subtitle
-        this.ctx.font = '18px Courier New';
+        this.ctx.font = `${subtitleSize}px Courier New`;
         this.ctx.fillStyle = '#cbb279';
-        this.ctx.fillText('Choose Your Difficulty Level', this.canvas.width / 2, 110);
+        this.ctx.fillText('Choose Your Difficulty Level', this.canvas.width / 2, 110 * this.scaleY);
         
-        // Level buttons - vertical layout
-        const buttonWidth = 200;
-        const buttonHeight = 60;
-        const buttonX = (this.canvas.width - buttonWidth) / 2; // Center horizontally
-        const startY = 150;
-        const spacing = 80; // Vertical spacing between buttons
+        // Level buttons - responsive vertical layout
+        const buttonWidth = 200 * this.scaleX;
+        const buttonHeight = 60 * this.scaleY;
+        const buttonX = (this.canvas.width - buttonWidth) / 2;
+        const startY = 150 * this.scaleY;
+        const spacing = 80 * this.scaleY;
         
         const levels = ['beginner', 'intermediate', 'expert'];
-        // Desert/Saudi theme colors
-        const colors = ['#8B7355', '#6B5B47', '#4A3728']; // Light to dark sandstone
+        const colors = ['#8B7355', '#6B5B47', '#4A3728'];
         
         for (let i = 0; i < levels.length; i++) {
             const level = levels[i];
@@ -752,33 +829,34 @@ class FlappyKiro {
             this.ctx.fillStyle = colors[i];
             this.ctx.fillRect(buttonX, y, buttonWidth, buttonHeight);
             
-            // Button border - Saudi theme
+            // Button border
             this.ctx.strokeStyle = '#cbb279';
             this.ctx.lineWidth = 2;
             this.ctx.strokeRect(buttonX, y, buttonWidth, buttonHeight);
             
             // Button text
             this.ctx.fillStyle = 'white';
-            this.ctx.font = 'bold 20px Courier New';
-            this.ctx.fillText(config.name, buttonX + buttonWidth / 2, y + 30);
+            this.ctx.font = `bold ${buttonTextSize}px Courier New`;
+            this.ctx.fillText(config.name, buttonX + buttonWidth / 2, y + buttonHeight / 2);
             
             // Level details
-            this.ctx.font = '12px Courier New';
+            this.ctx.font = `${detailSize}px Courier New`;
             this.ctx.fillStyle = '#E6D3A3';
-            this.ctx.fillText(`Gap: ${config.pipeGap}px • Speed: ${config.gameSpeed}`, buttonX + buttonWidth / 2, y + 50);
+            this.ctx.fillText(`Gap: ${config.pipeGap}px • Speed: ${config.gameSpeed}`, buttonX + buttonWidth / 2, y + buttonHeight * 0.75);
         }
         
         // Instructions
         this.ctx.fillStyle = 'white';
-        this.ctx.font = '16px Courier New';
-        this.ctx.fillText('Press 1, 2, or 3 • Or click a level', this.canvas.width / 2, 420);
+        this.ctx.font = `${Math.min(16 * Math.min(this.scaleX, this.scaleY), 18)}px Courier New`;
+        this.ctx.fillText('Press 1, 2, or 3 • Or click a level', this.canvas.width / 2, (420 * this.scaleY));
         
-        // Level descriptions - more compact
-        this.ctx.font = '12px Courier New';
+        // Level descriptions
+        const descSize = Math.min(12 * Math.min(this.scaleX, this.scaleY), 14);
+        this.ctx.font = `${descSize}px Courier New`;
         this.ctx.fillStyle = '#cbb279';
-        this.ctx.fillText('🟤 Beginner: Large gaps, gentle physics', this.canvas.width / 2, 450);
-        this.ctx.fillText('🟫 Intermediate: Balanced gameplay', this.canvas.width / 2, 470);
-        this.ctx.fillText('⬛ Expert: Tight gaps, fast & challenging', this.canvas.width / 2, 490);
+        this.ctx.fillText('🟤 Beginner: Large gaps, gentle physics', this.canvas.width / 2, (450 * this.scaleY));
+        this.ctx.fillText('🟫 Intermediate: Balanced gameplay', this.canvas.width / 2, (470 * this.scaleY));
+        this.ctx.fillText('⬛ Expert: Tight gaps, fast & challenging', this.canvas.width / 2, (490 * this.scaleY));
         
         // Add decorative Saudi pattern elements
         this.drawLevelDecorations();
